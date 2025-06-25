@@ -137,7 +137,7 @@ class STT(stt.STT):
     ) -> stt.SpeechEvent:
         raise NotImplementedError(
             "FireworksAI STT does not support batch recognition, use stream() instead"
-            )
+        )
 
     def stream(
         self,
@@ -383,11 +383,8 @@ class SpeechStream(stt.SpeechStream):
             final_event = stt.SpeechEvent(
                 type=stt.SpeechEventType.INTERIM_TRANSCRIPT,
                 alternatives=[
-                    stt.SpeechData(
-                        language=self._opts.language or "en",
-                        text=full_transcript
-                    )
-                ]
+                    stt.SpeechData(language=self._opts.language or "en", text=full_transcript)
+                ],
             )
             self._event_ch.send_nowait(final_event)
 

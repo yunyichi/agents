@@ -15,17 +15,15 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import os
 import weakref
-import dataclasses
 from dataclasses import dataclass
-from typing import List, Callable
+from typing import Callable
 from urllib.parse import urlencode
 
 import aiohttp
-
-from livekit import rtc
 from livekit.agents import (
     DEFAULT_API_CONNECT_OPTIONS,
     APIConnectOptions,
@@ -83,7 +81,7 @@ class STTOptions:
     prompt: NotGivenOr[str] = NOT_GIVEN
     temperature: NotGivenOr[float] = NOT_GIVEN
     response_format: str = "verbose_json"
-    timestamp_granularities: NotGivenOr[List[str]] = NOT_GIVEN
+    timestamp_granularities: NotGivenOr[list[str]] = NOT_GIVEN
 
 
 class STT(stt.STT):
@@ -96,7 +94,7 @@ class STT(stt.STT):
         language: NotGivenOr[str] = NOT_GIVEN,
         prompt: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
-        timestamp_granularities: NotGivenOr[List[str]] = NOT_GIVEN,
+        timestamp_granularities: NotGivenOr[list[str]] = NOT_GIVEN,
         response_format: str = "verbose_json",
         http_session: aiohttp.ClientSession | None = None,
     ):
@@ -136,14 +134,16 @@ class STT(stt.STT):
         language: NotGivenOr[str] = NOT_GIVEN,
         conn_options: APIConnectOptions,
     ) -> stt.SpeechEvent:
-        raise NotImplementedError("FireworksAI STT does not support batch recognition, use stream() instead")
+        raise NotImplementedError(
+            "FireworksAI STT does not support batch recognition, use stream() instead"
+            )
 
     def stream(
         self,
         *,
         language: NotGivenOr[str] = NOT_GIVEN,
         conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
-    ) -> "SpeechStream":
+    ) -> SpeechStream:
         config = dataclasses.replace(self._opts)
         stream = SpeechStream(
             stt=self,
@@ -162,7 +162,7 @@ class STT(stt.STT):
         language: NotGivenOr[str] = NOT_GIVEN,
         prompt: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
-        timestamp_granularities: NotGivenOr[List[str]] = NOT_GIVEN,
+        timestamp_granularities: NotGivenOr[list[str]] = NOT_GIVEN,
     ) -> None:
         if is_given(model):
             self._opts.model = model
@@ -218,7 +218,7 @@ class SpeechStream(stt.SpeechStream):
         language: NotGivenOr[str] = NOT_GIVEN,
         prompt: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
-        timestamp_granularities: NotGivenOr[List[str]] = NOT_GIVEN,
+        timestamp_granularities: NotGivenOr[list[str]] = NOT_GIVEN,
     ) -> None:
         if is_given(model):
             self._opts.model = model

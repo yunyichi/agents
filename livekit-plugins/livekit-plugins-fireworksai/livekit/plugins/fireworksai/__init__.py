@@ -27,8 +27,6 @@ __all__ = [
 
 from livekit.agents import Plugin
 
-from .log import logger
-
 
 class FireworksAIPlugin(Plugin):
     def __init__(self) -> None:

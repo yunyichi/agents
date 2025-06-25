@@ -134,9 +134,7 @@ class STT(stt.STT):
         language: NotGivenOr[str] = NOT_GIVEN,
         conn_options: APIConnectOptions,
     ) -> stt.SpeechEvent:
-        raise NotImplementedError(
-            "FireworksAI STT does not support batch recognition, use stream() instead"
-            )
+        raise NotImplementedError("FireworksAI STT does not support batch recognition, use stream() instead")
 
     def stream(
         self,
@@ -379,14 +377,20 @@ class SpeechStream(stt.SpeechStream):
             logger.debug('Interim Transcript: "%s"', full_transcript)
             final_event = stt.SpeechEvent(
                 type=stt.SpeechEventType.INTERIM_TRANSCRIPT,
-                alternatives=[stt.SpeechData(language=self._opts.language or "en", text=full_transcript)],
+                alternatives=[
+                    stt.SpeechData(
+                        language=self._opts.language or "en",
+                        text=full_transcript,
+                    )
+                ],
             )
             self._event_ch.send_nowait(final_event)
 
     def _on_audio_duration_report(self, duration: float) -> None:
         logger.info(
-            f"Fireworks Audio Usage Report: {duration:.2f}s "
-            f"(Note: a slight, expected system delay may cause this to differ from the report interval)"
+            "Fireworks Audio Usage Report: %.2fs (Note: a slight, expected system "
+            "delay may cause this to differ from the report interval)",
+            duration,
         )
         usage_event = stt.SpeechEvent(
             type=stt.SpeechEventType.RECOGNITION_USAGE,

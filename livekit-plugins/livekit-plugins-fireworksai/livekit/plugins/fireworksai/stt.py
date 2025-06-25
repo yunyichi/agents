@@ -24,6 +24,7 @@ from typing import Callable
 from urllib.parse import urlencode
 
 import aiohttp
+
 from livekit.agents import (
     DEFAULT_API_CONNECT_OPTIONS,
     APIConnectOptions,
@@ -134,7 +135,9 @@ class STT(stt.STT):
         language: NotGivenOr[str] = NOT_GIVEN,
         conn_options: APIConnectOptions,
     ) -> stt.SpeechEvent:
-        raise NotImplementedError("FireworksAI STT does not support batch recognition, use stream() instead")
+        raise NotImplementedError(
+            "FireworksAI STT does not support batch recognition, use stream() instead"
+            )
 
     def stream(
         self,
@@ -338,7 +341,9 @@ class SpeechStream(stt.SpeechStream):
             "temperature": self._opts.temperature if is_given(self._opts.temperature) else None,
             "response_format": self._opts.response_format,
             "timestamp_granularities": (
-                self._opts.timestamp_granularities if is_given(self._opts.timestamp_granularities) else None
+                self._opts.timestamp_granularities
+                if is_given(self._opts.timestamp_granularities)
+                else None
             ),
         }
 
@@ -380,9 +385,9 @@ class SpeechStream(stt.SpeechStream):
                 alternatives=[
                     stt.SpeechData(
                         language=self._opts.language or "en",
-                        text=full_transcript,
+                        text=full_transcript
                     )
-                ],
+                ]
             )
             self._event_ch.send_nowait(final_event)
 

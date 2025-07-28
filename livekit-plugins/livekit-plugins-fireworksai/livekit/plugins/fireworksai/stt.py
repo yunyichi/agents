@@ -38,6 +38,9 @@ from livekit.agents.utils import AudioBuffer, is_given
 from .log import logger
 
 
+_STREAMING_PATH = "/audio/transcriptions/streaming"
+
+
 class _PeriodicCollector:
     def __init__(self, duration: float, callback: Callable[[float], None]):
         self._duration = duration
@@ -81,27 +84,37 @@ class STTOptions:
     language: NotGivenOr[str] = NOT_GIVEN
     prompt: NotGivenOr[str] = NOT_GIVEN
     temperature: NotGivenOr[float] = NOT_GIVEN
+    text_timeout_seconds: float = 2.0
     response_format: str = "verbose_json"
     timestamp_granularities: NotGivenOr[list[str]] = NOT_GIVEN
+    base_url: NotGivenOr[str] = NOT_GIVEN
 
 
 class STT(stt.STT):
     def __init__(
         self,
         *,
-        model: str = "fireworks-asr-large",
+        model: NotGivenOr[str] = NOT_GIVEN,
         api_key: NotGivenOr[str] = NOT_GIVEN,
         sample_rate: int = 16000,
         language: NotGivenOr[str] = NOT_GIVEN,
         prompt: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
+        text_timeout_seconds: float = 2.0,
         timestamp_granularities: NotGivenOr[list[str]] = NOT_GIVEN,
         response_format: str = "verbose_json",
         http_session: aiohttp.ClientSession | None = None,
+        base_url: str = "wss://audio-streaming.us-virginia-1.direct.fireworks.ai/v1",
     ):
         super().__init__(
             capabilities=stt.STTCapabilities(streaming=True, interim_results=True),
         )
+        if sample_rate != 16000:
+            raise ValueError("FireworksAI STT only supports a sample rate of 16000")
+
+        if not 1.0 <= text_timeout_seconds <= 29.0:
+            raise ValueError("text_timeout_seconds must be between 1.0 and 29.0")
+
         fireworks_api_key = api_key if is_given(api_key) else os.environ.get("FIREWORKS_API_KEY")
         if fireworks_api_key is None:
             raise ValueError(
@@ -116,8 +129,10 @@ class STT(stt.STT):
             language=language,
             prompt=prompt,
             temperature=temperature,
+            text_timeout_seconds=text_timeout_seconds,
             response_format=response_format,
             timestamp_granularities=timestamp_granularities,
+            base_url=base_url,
         )
         self._session = http_session
         self._streams = weakref.WeakSet[SpeechStream]()
@@ -135,9 +150,7 @@ class STT(stt.STT):
         language: NotGivenOr[str] = NOT_GIVEN,
         conn_options: APIConnectOptions,
     ) -> stt.SpeechEvent:
-        raise NotImplementedError(
-            "FireworksAI STT does not support batch recognition, use stream() instead"
-        )
+        raise NotImplementedError("FireworksAI STT does not support batch recognition, use stream() instead")
 
     def stream(
         self,
@@ -163,6 +176,7 @@ class STT(stt.STT):
         language: NotGivenOr[str] = NOT_GIVEN,
         prompt: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
+        text_timeout_seconds: NotGivenOr[float] = NOT_GIVEN,
         timestamp_granularities: NotGivenOr[list[str]] = NOT_GIVEN,
     ) -> None:
         if is_given(model):
@@ -173,6 +187,10 @@ class STT(stt.STT):
             self._opts.prompt = prompt
         if is_given(temperature):
             self._opts.temperature = temperature
+        if is_given(text_timeout_seconds):
+            if not 1.0 <= text_timeout_seconds <= 29.0:
+                raise ValueError("text_timeout_seconds must be between 1.0 and 29.0")
+            self._opts.text_timeout_seconds = text_timeout_seconds
         if is_given(timestamp_granularities):
             self._opts.timestamp_granularities = timestamp_granularities
 
@@ -182,6 +200,7 @@ class STT(stt.STT):
                 language=language,
                 prompt=prompt,
                 temperature=temperature,
+                text_timeout_seconds=text_timeout_seconds,
                 timestamp_granularities=timestamp_granularities,
             )
 
@@ -205,8 +224,9 @@ class SpeechStream(stt.SpeechStream):
         self._session = http_session
         self._transcript_state: dict[str, str] = {}
         self._reconnect_event = asyncio.Event()
-        self._last_full_transcript: str = ""
         self._speaking = False
+        self._final_segments_length: dict[int, int] = {}
+        self._last_final_segment_id = -1
         self._audio_duration_collector = _PeriodicCollector(
             callback=self._on_audio_duration_report,
             duration=10.0,
@@ -219,6 +239,7 @@ class SpeechStream(stt.SpeechStream):
         language: NotGivenOr[str] = NOT_GIVEN,
         prompt: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
+        text_timeout_seconds: NotGivenOr[float] = NOT_GIVEN,
         timestamp_granularities: NotGivenOr[list[str]] = NOT_GIVEN,
     ) -> None:
         if is_given(model):
@@ -229,6 +250,8 @@ class SpeechStream(stt.SpeechStream):
             self._opts.prompt = prompt
         if is_given(temperature):
             self._opts.temperature = temperature
+        if is_given(text_timeout_seconds):
+            self._opts.text_timeout_seconds = text_timeout_seconds
         if is_given(timestamp_granularities):
             self._opts.timestamp_granularities = timestamp_granularities
 
@@ -335,15 +358,14 @@ class SpeechStream(stt.SpeechStream):
 
     async def _connect_ws(self) -> aiohttp.ClientWebSocketResponse:
         live_config = {
-            "model": self._opts.model,
+            "model": self._opts.model if is_given(self._opts.model) else None,
             "language": self._opts.language if is_given(self._opts.language) else None,
             "prompt": self._opts.prompt if is_given(self._opts.prompt) else None,
             "temperature": self._opts.temperature if is_given(self._opts.temperature) else None,
+            "text_timeout_seconds": self._opts.text_timeout_seconds,
             "response_format": self._opts.response_format,
             "timestamp_granularities": (
-                self._opts.timestamp_granularities
-                if is_given(self._opts.timestamp_granularities)
-                else None
+                self._opts.timestamp_granularities if is_given(self._opts.timestamp_granularities) else None
             ),
         }
 
@@ -352,23 +374,45 @@ class SpeechStream(stt.SpeechStream):
             "Authorization": self._api_key,
         }
 
-        ws_url = "wss://audio-streaming.us-virginia-1.direct.fireworks.ai/v1/audio/transcriptions/streaming"
+        ws_url = str(self._opts.base_url).rstrip("/") + _STREAMING_PATH
         filtered_config = {k: v for k, v in live_config.items() if v is not None}
         url = f"{ws_url}?{urlencode(filtered_config, doseq=True)}"
         ws = await self._session.ws_connect(url, headers=headers)
+        logger.info("connected to Fireworks AI STT", extra={"url": url})
         return ws
 
     def _process_stream_event(self, data: dict) -> None:
-        if "segments" in data:
+        if "segments" in data and data["segments"]:
+            latest_segment = max(data["segments"], key=lambda s: s["id"])
+            max_segment_id = latest_segment["id"]
+
             for segment in data["segments"]:
-                self._transcript_state[segment["id"]] = segment["text"]
+                segment_id = segment["id"]
+                if segment_id < self._last_final_segment_id:
+                    continue
+
+                if segment_id == self._last_final_segment_id:
+                    finalized_word_count = self._final_segments_length.get(segment_id, 0)
+                    words = segment.get("words", [])
+                    if isinstance(words, list) and finalized_word_count < len(words):
+                        new_words = words[finalized_word_count:]
+                        new_text = " ".join(w["word"] for w in new_words if "word" in w).strip()
+                        self._transcript_state[segment_id] = new_text
+                    elif segment_id in self._transcript_state:
+                        del self._transcript_state[segment_id]
+                else:
+                    self._transcript_state[segment["id"]] = segment["text"]
+
+            for local_segment_id in list(self._transcript_state.keys()):
+                if local_segment_id > max_segment_id:
+                    del self._transcript_state[local_segment_id]
 
             # The state dictionary may not be sorted, so we must sort it by the segment ID
             # before joining the text.
             sorted_segments = sorted(self._transcript_state.items(), key=lambda item: int(item[0]))
             full_transcript = " ".join([text for _, text in sorted_segments])
 
-            if not full_transcript or full_transcript == self._last_full_transcript:
+            if not full_transcript:
                 return
 
             if not self._speaking:
@@ -376,24 +420,32 @@ class SpeechStream(stt.SpeechStream):
                 start_event = stt.SpeechEvent(type=stt.SpeechEventType.START_OF_SPEECH)
                 self._event_ch.send_nowait(start_event)
 
-            self._last_full_transcript = full_transcript
-            # This is always an interim transcript because the server maintains the state
-            # and sends updates.
-            logger.debug('Interim Transcript: "%s"', full_transcript)
-            final_event = stt.SpeechEvent(
-                type=stt.SpeechEventType.INTERIM_TRANSCRIPT,
-                alternatives=[
-                    stt.SpeechData(language=self._opts.language or "en", text=full_transcript)
-                ],
-            )
-            self._event_ch.send_nowait(final_event)
+            is_final = False
+            words = latest_segment.get("words")
+            if words and isinstance(words, list) and words:
+                last_word = words[-1]
+                if isinstance(last_word, dict) and last_word.get("is_final") is True:
+                    is_final = True
+
+            if is_final:
+                final_event = stt.SpeechEvent(
+                    type=stt.SpeechEventType.FINAL_TRANSCRIPT,
+                    alternatives=[stt.SpeechData(language=self._opts.language or "", text=full_transcript)],
+                )
+                self._event_ch.send_nowait(final_event)
+                self._transcript_state.clear()
+                self._last_final_segment_id = max_segment_id
+                words = latest_segment.get("words")
+                if isinstance(words, list):
+                    self._final_segments_length[max_segment_id] = len(words)
+            else:
+                interim_event = stt.SpeechEvent(
+                    type=stt.SpeechEventType.INTERIM_TRANSCRIPT,
+                    alternatives=[stt.SpeechData(language=self._opts.language or "", text=full_transcript)],
+                )
+                self._event_ch.send_nowait(interim_event)
 
     def _on_audio_duration_report(self, duration: float) -> None:
-        logger.info(
-            "Fireworks Audio Usage Report: %.2fs (Note: a slight, expected system "
-            "delay may cause this to differ from the report interval)",
-            duration,
-        )
         usage_event = stt.SpeechEvent(
             type=stt.SpeechEventType.RECOGNITION_USAGE,
             recognition_usage=stt.RecognitionUsage(audio_duration=duration),

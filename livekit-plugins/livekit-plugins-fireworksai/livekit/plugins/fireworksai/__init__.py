@@ -16,12 +16,16 @@
 
 from .log import logger
 from .stt import STT, SpeechStream
+from .voice_agent_api import RealtimeModel, RealtimeSession, TtsVoice
 from .version import __version__
 
 __all__ = [
     "STT",
     "SpeechStream",
     "logger",
+    "RealtimeModel",
+    "RealtimeSession",
+    "TtsVoice",
     "__version__",
 ]
 

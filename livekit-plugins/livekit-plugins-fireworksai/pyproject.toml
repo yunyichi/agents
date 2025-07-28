@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "livekit-plugins-fireworksai"
+name = "fireworks-livekit"
 dynamic = ["version"]
 description = "LiveKit Agents Plugin for Fireworks AI"
 readme = "README.md"

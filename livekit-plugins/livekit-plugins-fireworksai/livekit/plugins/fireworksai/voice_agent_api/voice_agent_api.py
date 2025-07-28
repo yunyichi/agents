@@ -359,7 +359,7 @@ else:
 @dataclass
 class _RealtimeOptions:
     # General
-    base_url: NotGivenOr[str] = NOT_GIVEN
+    base_url: str
     api_key: NotGivenOr[str] = NOT_GIVEN
     account_id: NotGivenOr[str] = NOT_GIVEN
     conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS
@@ -462,8 +462,8 @@ class RealtimeModel(llm.RealtimeModel):
                 audio_output=True,
             )
         )
-        api_key = api_key or os.environ.get("FIREWORKS_API_KEY")
-        if not api_key:
+        resolved_api_key = api_key or os.environ.get("FIREWORKS_API_KEY")
+        if not resolved_api_key:
             raise ValueError(
                 "The api_key client option must be set either by passing api_key "
                 "to the client or by setting the FIREWORKS_API_KEY environment variable"
@@ -475,7 +475,7 @@ class RealtimeModel(llm.RealtimeModel):
 
         self._opts = _RealtimeOptions(
             base_url=base_url_val,
-            api_key=api_key,
+            api_key=resolved_api_key,
             account_id=account_id,
             conn_options=conn_options,
             max_session_duration=(
@@ -1174,7 +1174,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
             elif isinstance(event, AgentOutputProfile):
                 self.emit("audio_profile_received", event)
 
-    async def _execute_tool_calls(self, tool_calls: list[ToolCall]):
+    async def _execute_tool_calls(self, tool_calls: list[ToolCall]) -> None:
         tool_results_dict: dict[str, dict] = {}
         for call in tool_calls:
             tool = self._tools.function_tools.get(call.function.name)
@@ -1231,7 +1231,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
         logger.info(f"Sending tool results to Fireworks: {result_event}")
         self.send_event(result_event)
 
-    async def _handle_fireworks_binary(self, data: bytes):
+    async def _handle_fireworks_binary(self, data: bytes) -> None:
         async with self._generation_lock:
             if not self._current_generation:
                 logger.info("Received audio data without an active generation, ignoring.")

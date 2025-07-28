@@ -479,9 +479,7 @@ class RealtimeModel(llm.RealtimeModel):
             account_id=account_id,
             conn_options=conn_options,
             max_session_duration=(
-                max_session_duration
-                if is_given(max_session_duration)
-                else DEFAULT_MAX_SESSION_DURATION
+                max_session_duration if is_given(max_session_duration) else DEFAULT_MAX_SESSION_DURATION
             ),
             high_pass_filter=high_pass_filter,
             noise_suppression=noise_suppression,
@@ -646,9 +644,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
                 else:
                     self._emit_error(e, recoverable=True)
 
-                    retry_interval = self._realtime_model._opts.conn_options._interval_for_retry(
-                        num_retries
-                    )
+                    retry_interval = self._realtime_model._opts.conn_options._interval_for_retry(num_retries)
                     logger.warning(
                         f"Fireworks Agent API connection failed, retrying in {retry_interval}s",
                         exc_info=e,
@@ -678,9 +674,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
         return await self._realtime_model._ensure_http_session().ws_connect(
             url=url,
             headers=headers,
-            timeout=aiohttp.ClientWSTimeout(
-                ws_close=self._realtime_model._opts.conn_options.timeout
-            ),
+            timeout=aiohttp.ClientWSTimeout(ws_close=self._realtime_model._opts.conn_options.timeout),
         )
 
     async def _run_ws(self, ws_conn: aiohttp.ClientWebSocketResponse) -> None:
@@ -846,9 +840,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
             try:
                 config_kwargs["opening_behavior"] = OpeningBehavior(opts.opening_behavior)
             except ValueError:
-                logger.warning(
-                    f"Invalid OpeningBehavior value: {opts.opening_behavior}, using default."
-                )
+                logger.warning(f"Invalid OpeningBehavior value: {opts.opening_behavior}, using default.")
         if is_given(opts.agent_greeting):
             config_kwargs["agent_greeting"] = opts.agent_greeting
 
@@ -972,9 +964,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
     def interrupt(self) -> None:
         self._close_current_generation()
 
-    def truncate(
-        self, *, message_id: str, audio_end_ms: int, audio_transcript: NotGivenOr[str] = NOT_GIVEN
-    ) -> None:
+    def truncate(self, *, message_id: str, audio_end_ms: int, audio_transcript: NotGivenOr[str] = NOT_GIVEN) -> None:
         logger.debug("Truncate is not supported by Fireworks Agent.")
         pass
 
@@ -1054,9 +1044,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
         This is called when the agent is about to start speaking.
         """
         if self._current_generation:
-            logger.info(
-                "A new generation is starting while another is in progress. Closing the previous one."
-            )
+            logger.info("A new generation is starting while another is in progress. Closing the previous one.")
             self._close_current_generation()
 
         self._agent_is_replying = True
@@ -1100,9 +1088,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
         if self._current_generation._first_token_timestamp is None:
             self._current_generation._first_token_timestamp = time.time()
 
-        logger.debug(
-            f"Handling AgentOutputDeltaMetadata for output_id: {event.output_id}, delta_id: {event.delta_id}"
-        )
+        logger.debug(f"Handling AgentOutputDeltaMetadata for output_id: {event.output_id}, delta_id: {event.delta_id}")
 
         unique_key = f"{event.delta_id}"
         self._current_generation.pending_audio_metadata[unique_key] = event
@@ -1143,9 +1129,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
             elif isinstance(event, AgentOutputGenerating):
                 if self._last_user_transcript:
                     self._emit_input_speech_stopped()
-                    self.emit_input_audio_transcription_completed(
-                        self._last_user_transcript, is_final=True
-                    )
+                    self.emit_input_audio_transcription_completed(self._last_user_transcript, is_final=True)
                     self._chat_ctx.add_message(role="user", content=self._last_user_transcript)
                     if lk_fw_debug:
                         logger.debug("I send a final complete event")
@@ -1153,9 +1137,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
 
                 self._handle_new_generation()
                 if lk_fw_debug:
-                    logger.debug(
-                        f"Generation created, is_agent_replying: {self._agent_is_replying}"
-                    )
+                    logger.debug(f"Generation created, is_agent_replying: {self._agent_is_replying}")
 
             elif isinstance(event, AgentOutputDeltaMetadata):
                 self._handle_delta_metadata(event)
@@ -1171,9 +1153,7 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
                 self._agent_is_replying = False
 
             elif isinstance(event, AgentOutputToolCall):
-                logger.info(
-                    f"Received tool call request from Fireworks, executing directly: {event.tool_calls}"
-                )
+                logger.info(f"Received tool call request from Fireworks, executing directly: {event.tool_calls}")
                 for call in event.tool_calls:
                     self._chat_ctx.insert(
                         llm.FunctionCall(
@@ -1346,9 +1326,9 @@ class RealtimeSession(llm.RealtimeSession[Literal["agent_interrupted",]]):
         self._current_generation.function_ch.close()
         self._current_generation.message_ch.close()
         self._current_generation.pending_audio_metadata.clear()
-        if (
-            msg := self._chat_ctx.get_by_id(self._current_generation.message.message_id)
-        ) and isinstance(msg, llm.ChatMessage):
+        if (msg := self._chat_ctx.get_by_id(self._current_generation.message.message_id)) and isinstance(
+            msg, llm.ChatMessage
+        ):
             msg.content = [self._current_generation.full_text]
         with contextlib.suppress(asyncio.InvalidStateError):
             self._current_generation._done_fut.set_result(None)
